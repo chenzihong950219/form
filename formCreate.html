@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Document</title>
+
+    <!-- import Vue.js -->
+    <script src="https://cdn.bootcdn.net/ajax/libs/vue/2.6.12/vue.min.js"></script>
+    <script src="https://unpkg.com/http-vue-loader"></script>
+    <script>
+      Vue.component('map-select', httpVueLoader('./components/map-select.vue'))
+    </script>
+    <!-- import stylesheet -->
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/element-ui/lib/theme-chalk/index.css"
+    />
+    <!-- import element -->
+    <script src="https://unpkg.com/element-ui/lib/index.js"></script>
+  </head>
+  <style></style>
+
+  <body>
+    <div id="box" class="box">
+      <map-select v-show="false"></map-select>
+      <div id="form-warp"></div>
+    </div>
+  </body>
+  <!-- import form-create/element -->
+  <script src="https://unpkg.com/@form-create/element-ui@2.5.28/dist/form-create.min.js"></script>
+  <!-- import form-create/designer -->
+  <script src="https://unpkg.com/@form-create/designer/dist/index.min.js"></script>
+  <!-- 引入webview -->
+  <script
+    type="text/javascript"
+    src="https://unpkg.com/@dcloudio/uni-webview-js@0.0.1/index.js"
+  ></script>
+  <!-- 引入jquery -->
+  <script src="https://code.jquery.com/jquery-3.0.0.min.js"></script>
+  <script type="text/javascript">
+    new Vue({
+      el: '#box',
+
+      data() {
+        return {
+          code: '',
+          datas: {
+            name: 9,
+          },
+          action: '', //setValue:回显  //getValue:获取表单  // 校验 validate
+          fapi: null,
+          formData: {},
+          value: {},
+        }
+      },
+
+      watch: {
+        value(newVal) {
+          if (this.fapi != null && newVal != undefined) {
+            this.fapi.setValue(newVal)
+          }
+        },
+      },
+      mounted() {
+        // 自适应缩放页面
+        this.scalePage()
+        var url = window.location.href
+        var temp = url.split('?')[1]
+        var pram = new URLSearchParams('?' + temp)
+        this.code = pram.get('code')
+
+        this.getFormData()
+
+        // // 注册app传参方法
+        window.handleMessage = (param) => {
+          this.action = param.type
+          switch (this.action) {
+            case 'setValue':
+              this.value = param.data
+              break
+            case 'getValue':
+              this.getValue()
+              break
+            case 'validate':
+              this.validate()
+              break
+            default:
+              break
+          }
+        }
+      },
+
+      methods: {
+        // 缩放页面
+        scalePage() {
+          let cliWidth =
+            document.documentElement.clientWidth || document.body.clientWidth
+          let contW = 375
+          let w = cliWidth / contW
+          let appDom = document.querySelector('#box')
+          appDom.style.transform = `scale(${w})`
+          appDom.style.transformOrigin = 'top left'
+        },
+        // 获取表单配置项
+        getFormData() {
+          $.ajax({
+            url: `http://112.30.112.43:10001/smart-mine/mine-restoration-backend/api/manage/app-forms/code/${this.code}`,
+            dataType: 'json',
+            type: 'get',
+            success: (result) => {
+              if (result.code == 200) {
+                this.formData = result.data.content
+                const root = document.getElementById('form-warp')
+                this.formData.options.el = root
+                // 地图组件监听方法
+                for (let item of this.formData.rules) {
+                  if (item.type == 'map-select') {
+                    item.on = {
+                      add: this.addMap,
+                    }
+                  }
+                }
+                this.fapi = this.$formCreate(
+                  this.formData.rules,
+                  this.formData.options
+                )
+
+                // 赋值回显
+                if (
+                  JSON.stringify(this.value) != '{}' &&
+                  this.value != undefined
+                ) {
+                  this.fapi.setValue(this.value)
+                }
+                // 发送页面表单加载完成指令
+                uni.postMessage({
+                  data: { type: 'loaded', code: this.code },
+                })
+              } else {
+                this.$message.error(result.message)
+              }
+            },
+            error: (data) => {
+              this.$message.error('请求错误')
+            },
+          })
+        },
+        clearMap(inject) {
+          // console.log(inject.self.field)
+        },
+        addMap(inject) {
+          // 发送跳转地图区域选择组件指令
+          uni.postMessage({
+            data: {
+              type: 'goMap',
+              code: this.code,
+              props: inject.self.field,
+            },
+          })
+        },
+        // 获取参数值
+        getValue() {
+          let data = this.fapi.formData()
+          uni.postMessage({
+            data: {
+              type: 'getValue',
+              code: this.code,
+              data,
+            },
+          })
+        },
+        // 验证
+        validate() {
+          this.fapi.validate((validate) => {
+            uni.postMessage({
+              data: { type: 'validate', code: this.code, validate },
+            })
+          })
+        },
+      },
+    })
+  </script>
+  <style>
+    * {
+      padding: 0;
+      margin: 0;
+    }
+    #box {
+      width: 375px;
+      height: auto;
+      margin: 0 auto;
+      padding: 20px;
+      box-sizing: border-box;
+      position: absolute;
+      left: 0;
+      top: 0;
+    }
+    .form-warp {
+      width: 100%;
+      height: auto;
+    }
+  </style>
+</html>
